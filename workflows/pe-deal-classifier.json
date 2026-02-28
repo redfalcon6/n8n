@@ -1,0 +1,337 @@
+{
+  "name": "PE Deal Email Classifier & NDA Request",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "filters": {
+          "readStatus": "unread"
+        }
+      },
+      "id": "trigger-1",
+      "name": "New Email",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.3,
+      "position": [112, 320],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_GMAIL_OAUTH2_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "messageId": "={{ $json.id }}",
+        "simple": false,
+        "options": {}
+      },
+      "id": "a087b6b1-1c3d-465f-bd22-dcaf1565e8c2",
+      "name": "Fetch Full Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [256, 304],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_GMAIL_OAUTH2_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "inputText": "=From: {{ $json.from }}\nSubject: {{ $json.subject }}\n\n{{ $json.textPlain }}\n\n{{ $json.textHtml }}",
+        "categories": {
+          "categories": [
+            {
+              "category": "PE Deal Marketing",
+              "description": "Email is marketing, advertising, or pitching a business that is for sale or for acquisition. We are a private equity firm that buys businesses. We are looking for emails which are marketing businesses that are for sale. Examples include: deal teasers with financial highlights (EBITDA, revenue), confidentiality agreement requests, investment banker introductions for potential acquisitions, and deal flow marketing emails."
+            },
+            {
+              "category": "Not PE Deal",
+              "description": "Email is NOT marketing a private equity deal. Includes regular correspondence, newsletters, spam, meeting requests, operational emails, or any non-PE-deal content"
+            }
+          ]
+        },
+        "options": {
+          "fallback": "other"
+        }
+      },
+      "id": "classifier-1",
+      "name": "Classify Email",
+      "type": "@n8n/n8n-nodes-langchain.textClassifier",
+      "typeVersion": 1.1,
+      "position": [400, 304]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3-flash-preview",
+        "options": {}
+      },
+      "id": "gemini-classifier",
+      "name": "Gemini (Classifier)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [400, 528],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YOUR_GEMINI_CREDENTIAL_ID",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Evaluate the following private equity deal marketing email against our investment criteria and provide a brief assessment.\n\nOUR CRITERIA:\n- Target EBITDA: $5M+ preferred\n- Preferred sectors: Industrial services\n- We are flexible if the sector is interesting and has strong rollup/platform potential\n\nAnalyze the email and extract:\n1. Deal/Fund name\n2. Estimated EBITDA (if mentioned)\n3. Industry/Sector\n4. Rollup potential (if any signals)\n5. Your recommendation: INTERESTED or PASS (with brief reasoning)\n\nEmail:\nFrom: {{ $('Fetch Full Email').item.json.from }}\nSubject: {{ $('Fetch Full Email').item.json.subject }}\n\n{{ $('Fetch Full Email').item.json.textPlain }}\n\n{{ $('Fetch Full Email').item.json.textHtml }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are a private equity deal screening analyst. You evaluate inbound deal marketing emails against your firm's investment criteria. Be concise and structured in your analysis. If EBITDA or financials are not mentioned, note that and base your recommendation on sector fit and any other available signals."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "id": "353d14e9-04bc-429e-b388-cbe13b4d97e7",
+      "name": "Evaluate Deal",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [848, 304]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3-flash-preview",
+        "options": {}
+      },
+      "id": "245834e6-03b8-457b-9448-ba030cc99654",
+      "name": "Gemini (Evaluator)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [800, 528],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YOUR_GEMINI_CREDENTIAL_ID",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Draft a professional email reply to the following PE deal marketing email. The reply should thank them, express interest in learning more about the opportunity, and request the NDA (Non-Disclosure Agreement) so we can review the deal materials.\n\nMention the specific deal or fund name from the email. Keep it concise and professional. Output ONLY the email body text - no subject line, no greeting header, no signature block.\n\nOriginal email:\nFrom: {{ $('Fetch Full Email').item.json.from }}\nSubject: {{ $('Fetch Full Email').item.json.subject }}\n\n{{ $('Fetch Full Email').item.json.textPlain }}\n\n{{ $('Fetch Full Email').item.json.textHtml }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are a professional private equity investor's assistant. You draft concise, polished email responses requesting NDAs for PE deal opportunities that are being marketed to your firm. Your tone is professional, courteous, and direct. Never fabricate deal details - only reference what's in the original email."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "id": "llm-draft",
+      "name": "Draft NDA Request",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [1200, 304]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3-pro-preview",
+        "options": {}
+      },
+      "id": "gemini-drafter",
+      "name": "Gemini (Drafter)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [1216, 544],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YOUR_GEMINI_CREDENTIAL_ID",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Draft a brief, polite email declining this private equity deal opportunity. Thank them for thinking of us, but indicate we'll pass on this particular opportunity. Keep it professional and leave the door open for future deals.\n\nOriginal email:\nFrom: {{ $('Fetch Full Email').item.json.from }}\nSubject: {{ $('Fetch Full Email').item.json.subject }}\n\n{{ $('Fetch Full Email').item.json.textPlain }}\n\n{{ $('Fetch Full Email').item.json.textHtml }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are a professional private equity investor's assistant. Draft concise, gracious decline emails. Never be specific about why you're passing - keep it general. Be brief (3-4 sentences max). Output ONLY the email body text - no subject line, no greeting header, no signature block."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "id": "3f264902-df40-4a12-ae22-c51ff5977acd",
+      "name": "Draft Pass Email",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [1568, 304]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3-pro-preview",
+        "options": {}
+      },
+      "id": "917c569f-3e05-4de3-ba4e-901f2159e673",
+      "name": "Gemini (Pass)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [1616, 512],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YOUR_GEMINI_CREDENTIAL_ID",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "sendAndWait",
+        "sendTo": "YOUR_EMAIL@example.com",
+        "subject": "=PE Deal Review: {{ $('Fetch Full Email').item.json.subject }}",
+        "message": "=<h3>PE Deal Screening</h3><p><strong>From:</strong> {{ $('Fetch Full Email').item.json.from }}</p><p><strong>Subject:</strong> {{ $('Fetch Full Email').item.json.subject }}</p><hr><h4>AI Recommendation:</h4><p>{{ $('Evaluate Deal').item.json.text }}</p><hr><h4>Draft NDA Request (if pursuing):</h4><p>{{ $('Draft NDA Request').item.json.text }}</p><hr><h4>Draft Pass Email (if declining):</h4><p>{{ $('Draft Pass Email').item.json.text }}</p><hr><p><strong>Approve = Send NDA Request (pursue the deal)</strong><br><strong>Reject = Send Pass Email (decline the deal)</strong></p>",
+        "approvalOptions": {
+          "values": {
+            "approvalType": "double"
+          }
+        },
+        "options": {}
+      },
+      "id": "review-1",
+      "name": "Review Decision",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [1904, 304],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_GMAIL_OAUTH2_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 3,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{ $json.data.approved }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-approved",
+      "name": "Pursue or Pass?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [2112, 304]
+    },
+    {
+      "parameters": {
+        "operation": "reply",
+        "messageId": "={{ $('Fetch Full Email').item.json.id }}",
+        "message": "={{ $('Draft NDA Request').item.json.text }}",
+        "options": {}
+      },
+      "id": "reply-1",
+      "name": "Send NDA Request",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [2576, 112],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_GMAIL_OAUTH2_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "reply",
+        "messageId": "={{ $('Fetch Full Email').item.json.id }}",
+        "message": "={{ $('Draft Pass Email').item.json.text }}",
+        "options": {}
+      },
+      "id": "92bb265c-c1dc-4b9e-bb84-b1bd895dee3e",
+      "name": "Send Pass",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [2576, 560],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_GMAIL_OAUTH2_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "New Email": {
+      "main": [[{"node": "Fetch Full Email", "type": "main", "index": 0}]]
+    },
+    "Fetch Full Email": {
+      "main": [[{"node": "Classify Email", "type": "main", "index": 0}]]
+    },
+    "Gemini (Classifier)": {
+      "ai_languageModel": [[{"node": "Classify Email", "type": "ai_languageModel", "index": 0}]]
+    },
+    "Classify Email": {
+      "main": [[{"node": "Evaluate Deal", "type": "main", "index": 0}]]
+    },
+    "Gemini (Evaluator)": {
+      "ai_languageModel": [[{"node": "Evaluate Deal", "type": "ai_languageModel", "index": 0}]]
+    },
+    "Evaluate Deal": {
+      "main": [[{"node": "Draft NDA Request", "type": "main", "index": 0}]]
+    },
+    "Gemini (Drafter)": {
+      "ai_languageModel": [[{"node": "Draft NDA Request", "type": "ai_languageModel", "index": 0}]]
+    },
+    "Draft NDA Request": {
+      "main": [[{"node": "Draft Pass Email", "type": "main", "index": 0}]]
+    },
+    "Gemini (Pass)": {
+      "ai_languageModel": [[{"node": "Draft Pass Email", "type": "ai_languageModel", "index": 0}]]
+    },
+    "Draft Pass Email": {
+      "main": [[{"node": "Review Decision", "type": "main", "index": 0}]]
+    },
+    "Review Decision": {
+      "main": [[{"node": "Pursue or Pass?", "type": "main", "index": 0}]]
+    },
+    "Pursue or Pass?": {
+      "main": [
+        [{"node": "Send NDA Request", "type": "main", "index": 0}],
+        [{"node": "Send Pass", "type": "main", "index": 0}]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
