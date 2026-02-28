@@ -1,0 +1,15 @@
+# Environment and secrets
+.env
+.env.*
+credentials.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# n8n
+*.sqlite
